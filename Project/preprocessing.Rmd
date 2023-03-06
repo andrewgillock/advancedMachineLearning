@@ -1,0 +1,296 @@
+---
+title: "preprocessing"
+author: "Andrew Gillock"
+date: "2022-11-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+getwd()
+setwd("/Users/apgillock/Dropbox/MIS 382N Advanced Machine Learning/Project/dataset_diabetes")
+```
+
+```{r}
+library(tidyverse)
+data <- read.csv('diabetic_data.csv')
+```
+
+We first consider a binary response variable
+```{r}
+data <- data %>% mutate(
+  readmitted = case_when(
+    readmitted == '>30' ~ 1,
+    readmitted == '<30' ~ 1,
+    readmitted == 'NO' ~ 0
+  )
+)
+```
+
+Remove duplicates
+```{r}
+data <- data %>% distinct(patient_nbr, .keep_all = TRUE)
+```
+
+Look Into Missing Values
+```{r}
+data %>% group_by(max_glu_serum) %>% count()
+data %>% group_by(A1Cresult) %>% count()
+data %>% group_by(weight) %>% count()
+```
+
+Remove all instances of '?'
+```{r}
+data <- data %>% 
+  select(-weight, -payer_code) %>% 
+  filter(diag_1 != '?', diag_2 != '?', diag_3 != '?', race != '?')
+dim(data)
+```
+
+
+
+
+Re-level categorical variables
+```{r}
+# condense admission_type_id from 8 levels -> 3 levels
+data %>% group_by(admission_type_id) %>% count()
+
+data <- data %>% mutate(
+  admission_type_id = case_when(
+    admission_type_id == 1 ~ 1,
+    admission_type_id == 2 ~ 1,
+    admission_type_id == 7 ~ 1,
+    admission_type_id == 3 ~ 2,
+    admission_type_id == 4 ~ 2,
+    admission_type_id == 5 ~ 3,
+    admission_type_id == 6 ~ 3,
+    admission_type_id == 8 ~ 3
+  )
+)
+
+data %>% group_by(admission_type_id) %>% count()
+```
+
+```{r}
+# condense discharge_disposition_id from 29 levels -> 5 levels
+data %>% group_by(discharge_disposition_id) %>% count()
+
+data <- data %>% mutate(
+  discharge_disposition_id = case_when(
+    discharge_disposition_id == 1 ~ 1,
+    discharge_disposition_id == 6 ~ 1,
+    discharge_disposition_id == 7 ~ 1,
+    discharge_disposition_id == 8 ~ 1,
+    discharge_disposition_id == 13 ~ 1,
+    discharge_disposition_id == 14 ~ 1,
+    discharge_disposition_id == 23 ~ 1,
+    discharge_disposition_id == 24 ~ 1,
+    discharge_disposition_id == 11 ~ 2,
+    discharge_disposition_id == 19 ~ 2,
+    discharge_disposition_id == 20 ~ 2,
+    discharge_disposition_id == 21 ~ 2,
+    discharge_disposition_id == 3 ~ 3,
+    discharge_disposition_id == 4 ~ 3,
+    discharge_disposition_id == 9 ~ 3,
+    discharge_disposition_id == 12 ~ 3,
+    discharge_disposition_id == 2 ~ 4,
+    discharge_disposition_id == 5 ~ 4,
+    discharge_disposition_id == 10 ~ 4,
+    discharge_disposition_id == 15 ~ 4,
+    discharge_disposition_id == 16 ~ 4,
+    discharge_disposition_id == 17 ~ 4,
+    discharge_disposition_id == 22 ~ 4,
+    discharge_disposition_id == 30 ~ 4,
+    discharge_disposition_id == 27 ~ 4,
+    discharge_disposition_id == 28 ~ 4,
+    discharge_disposition_id == 29 ~ 4,
+    discharge_disposition_id == 18 ~ 5,
+    discharge_disposition_id == 25 ~ 5,
+    discharge_disposition_id == 26 ~ 5,
+  )
+)
+
+data %>% group_by(discharge_disposition_id) %>% count()
+```
+
+```{r}
+# condense admission_source_id from 26 levels -> 5 levels
+data %>% group_by(admission_source_id) %>% count()
+
+data <- data %>% mutate(
+  admission_source_id = case_when(
+    admission_source_id == 1 ~ 1,
+    admission_source_id == 2 ~ 1,
+    admission_source_id == 3 ~ 1,
+    admission_source_id == 8 ~ 1,
+    admission_source_id == 19 ~ 1,
+    admission_source_id == 25 ~ 1,
+    admission_source_id == 4 ~ 2,
+    admission_source_id == 5 ~ 2,
+    admission_source_id == 6 ~ 2,
+    admission_source_id == 18 ~ 2,
+    admission_source_id == 22 ~ 2,
+    admission_source_id == 26 ~ 2,
+    admission_source_id == 7 ~ 3,
+    admission_source_id == 10 ~ 3,
+    admission_source_id == 11 ~ 4,
+    admission_source_id == 12 ~ 4,
+    admission_source_id == 13 ~ 4,
+    admission_source_id == 14 ~ 4,
+    admission_source_id == 9 ~ 5,
+    admission_source_id == 15 ~ 5,
+    admission_source_id == 17 ~ 5,
+    admission_source_id == 20 ~ 5,
+    admission_source_id == 21 ~ 5,
+  )
+)
+
+data %>% group_by(admission_source_id) %>% count()
+```
+
+Remove drug interactions
+```{r}
+names(data)
+# columns 40-44 contain drug interactions... zero patients
+data[41:45] %>% filter_all(any_vars(. %in% 'Yes'))
+
+drug_interactions <- names(data[41:45])
+
+data <- data %>% select(-drug_interactions)
+```
+
+Recode medications to drug classes
+```{r}
+# columns 22-38 contain diabetic medications
+meds <- names(data)[23:39]
+
+# code each medication as binary
+data <- data %>% mutate_at(
+  vars(any_of(meds)),
+  funs(case_when(
+    . == 'Steady' ~ 1,
+    . == 'Down' ~ 1,
+    . == 'Up' ~ 1,
+    . == 'No' ~ 0
+  )
+  )
+)
+
+# convert to drug classes
+data <- data %>% mutate(
+  'Biguanide' = case_when(
+    metformin == 1 ~ 1,
+    TRUE ~ 0),
+  'Meglitinide' = case_when(
+    repaglinide == 1 ~ 1,
+    nateglinide == 1 ~ 1,
+    TRUE ~ 0),
+  'Sulfonylurea' = case_when(
+    chlorpropamide == 1 ~ 1,
+    glimepiride == 1 ~ 1,
+    acetohexamide == 1 ~ 1,
+    glipizide == 1 ~ 1,
+    glyburide == 1 ~ 1,
+    tolbutamide == 1 ~ 1,
+    tolazamide == 1 ~ 1,
+    TRUE ~ 0),
+  'Thiazolidinedione' = case_when(
+    pioglitazone == 1 ~ 1,
+    rosiglitazone == 1 ~ 1,
+    troglitazone == 1 ~ 1,
+    TRUE ~ 0),
+  'Alpha-glucosidase inhibitor' = case_when(
+    acarbose == 1 ~ 1,
+    miglitol == 1 ~ 1,
+    TRUE ~ 0),
+  'Loop Diuretic' = case_when(
+    examide == 1 ~ 1,
+    TRUE ~ 0),
+  'Dipeptidyl peptidase-4 inhibitor' = case_when(
+    citoglipton == 1 ~ 1,
+    TRUE ~ 0)
+  )
+
+# remove individual medications
+data <- data %>% select(-meds)
+```
+
+```{r}
+View(data)
+length(meds)
+```
+
+```{r}
+library(Hmisc)
+
+quant_data <- data %>% 
+  select(time_in_hospital, num_lab_procedures, 
+         num_procedures, num_medications,
+         number_outpatient, number_emergency,
+         number_inpatient)
+#hist.data.frame(quant_data, mtitl = 'Frequencies of Numeric Features')
+#pairs(quant_data)
+quant_data %>% cor()
+```
+
+```{r}
+# install.packages("factoextra")
+# library(factoextra)
+# 
+# pcs <- prcomp(quant_data, scale = TRUE)
+# summary(pcs)
+# 
+# pc_scores <- as.data.frame(pcs$x[,1:3])
+# 
+# data <- cbind(data, pc_scores)
+# 
+# 
+# 
+# fviz_eig(pcs)
+# 
+# fviz_pca_var(pcs,
+#              col.var = "contrib", # Color by contributions to the PC
+#              gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+#              repel = TRUE     # Avoid text overlapping
+#              )
+```
+
+```{r}
+write.csv(data, "/Users/apgillock/Dropbox/MIS 382N Advanced Machine Learning/Project/ogpreprocessed.csv", row.names = FALSE)
+```
+
+```{r}
+data %>% group_by(patient_nbr) %>% count()
+data2 <- data %>% distinct(patient_nbr, .keep_all = TRUE)
+```
+
+
+```{r}
+data2 %>% head()
+data2 %>% mutate(
+  drug_class = case_when(
+    Biguanide == 1 ~ 'Biguanide',
+    Meglitinide == 1 ~ 'Meglitinide',
+    Sulfonylurea == 1 ~ 'Sulfonylurea',
+    Thiazolidinedione == 1 ~ 'Thiazolidinedione',
+    `Alpha-glucosidase inhibitor` == 1 ~ 'Alpha-glucosidase inhibitor',
+    `Loop Diuretic` == 1 ~ 'Loop Diuretic',
+    `Dipeptidyl peptidase-4 inhibitor` == 1 ~ 'Dipeptidyl peptidase-4 inhibitor',
+    TRUE ~ 'None'
+    )
+  ) %>% group_by(drug_class) %>% ggplot(aes(x = drug_class)) + geom_bar()
+```
+
+```{r}
+data %>% group_by(A1Cresult) %>% count()
+```
+
+```{r}
+data %>% group_by(admission_type_id) %>% count()
+data %>% group_by(admission_source_id) %>% count()
+data %>% group_by(discharge_disposition_id) %>% count()
+```
+
